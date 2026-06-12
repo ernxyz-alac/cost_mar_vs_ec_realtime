@@ -3,21 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Live Game</title>
+    <title>Live Game - CIV vs ECU</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
             user-select: none;
-        }
-
-        @font-face {
-            font-family: 'good-brush';
-            src: url('./fonts/good-brush.ttf');
-            font-weight: normal;
-            font-style: normal;
-            font-display: swap;
         }
 
         html, body {
@@ -28,7 +20,7 @@
         }
 
         body {
-            font-family: 'good-brush', Arial, sans-serif;
+            font-family: sans-serif;
         }
 
         #video {
@@ -48,145 +40,142 @@
             overflow: hidden;
         }
 
-        .goal-screen {
-            position: absolute;
-            z-index: 10;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.5s ease;
-            text-align: center;
-        }
-
-        .goal-screen.show {
-            opacity: 1;
-            visibility: visible;
-        }
-
+        /* Simplified score container with vertical alignment */
         .live-score-container {
             position: absolute;
             z-index: 2;
             display: flex;
             justify-content: center;
-            align-items: baseline;
-            gap: 20px;
+            align-items: center;
             width: 100%;
-            top: 35%;
+            height: 100%;
             color: white;
             transition: opacity 0.3s ease;
-            margin-left: -10px;
-        }
-
-        #mainCard {
-            display: flex;
-            justify-content: center;
-            align-items: baseline;
-        }
-
-        .flag-img {
-            width: 180px;
-            height: auto;
-            object-fit: contain;
-            vertical-align: middle;
+            
+            /* HIGHLIGHT: To move the entire score block vertically, adjust this 'top' or use 'margin-top' */
+            top: 0%; 
         }
 
         .score-text {
-            font-size: 180px;
             font-weight: bold;
             text-shadow: 4px 4px 10px rgba(0,0,0,0.5);
-            margin: 0 20px;
+            line-height: 1;
         }
 
-        .test-btn {
-            position: absolute;
-            bottom: 10px;
-            right: 10px;
-            z-index: 20;
-            background: rgba(0,0,0,0.7);
-            color: white;
-            border: 2px solid #ffd700;
-            border-radius: 8px;
-            padding: 8px 16px;
-            font-size: 14px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: all 0.3s ease;
+        /* 
+           HIGHLIGHT: 
+           - To separate the scores from each other, adjust the 'gap' property.
+           - To move the scores vertically, adjust the 'top' property in the media queries below.
+        */
+
+        /* Specific CSS for Horizontal Screen (768x320) */
+        @media (width: 768px) and (height: 320px) {
+            .live-score-container {
+                gap: 5%; /* Separation between scores for horizontal setup */
+                top: 22%;   /* Move vertically: adjust this to shift the block up or down */
+            }
+            .score-text {
+                font-size: 90px;
+            }
+        }
+
+        /* Specific CSS for Vertical Screen (600x800) */
+        @media (width: 600px) and (height: 800px) {
+            .live-score-container {
+                gap: 50px; /* Separation between scores for vertical setup */
+                top: 10%;  /* Move vertically: adjust this to shift the block up or down */
+                right: 1%;
+            }
+            .score-text {
+                font-size: 120px;
+            }
+        }
+
+        /* Fallback for other sizes (Responsive) */
+        @media not all and (width: 768px) and (height: 320px) {
+            @media not all and (width: 600px) and (height: 800px) {
+                .live-score-container {
+                    gap: 5%; /* Separation between scores for horizontal setup */
+                    top: 22%;   /* Move vertically: adjust this to shift the block up or down */
+                }
+                .score-text {
+                    font-size: 90px;
+                }
+            }
         }
     </style>
 </head>
 <body>
 <div id="main-container">
-    <video id="video" autoplay muted loop playsinline preload="auto">
-      <source src="./videos/bg.mp4" type="video/mp4">
-    </video>
+    <!-- The video source is handled dynamically by JavaScript below -->
+    <video id="video" autoplay muted loop playsinline preload="auto"></video>
 
-    <!-- Goal Celebration Screen -->
-    <div id="goalScreen" class="goal-screen"></div>
-
-    <!-- Centered Layout -->
+    <!-- Simplified Layout: No flags, only scores vertically aligned -->
     <div id="mainCard" class="live-score-container">
-        <img id="home-flag" src="https://flagcdn.com/w80/mx.png" class="flag-img" alt="Mexico">
-        <div id="score" class="score-text"><span></span> 0 &nbsp; 0<span></span></div>
-        <img id="away-flag" src="https://flagcdn.com/w80/za.png" class="flag-img" alt="South Africa">
+        <div id="home-score" class="score-text"></div>
+        <!-- Vertical separator managed by CSS gap -->
+        <div id="away-score" class="score-text"></div>
     </div>
-
-    <!-- <button id="testGoalBtn" class="test-btn">🎯 TEST</button> -->
 </div>
 
 <script>
-    const GAME_ID = "sudafrica_vs_mexico";
-    const STORAGE_KEY = "sudafrica_vs_mexico_score";
-    
-    // 1. Get saved score for UI display and as the baseline for comparison
-    let previousNumbers = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [2, 0];
-    document.getElementById("score").innerHTML = `<span>${previousNumbers[0]}</span> &nbsp <span>${previousNumbers[1]}</span>`;
-
-    let celebrationActive = false;
-    let goalTimeout = null;
-
-    function showGoal(teamName, scoreText) {
-        if (celebrationActive) return;
-
-        celebrationActive = true;
-        const goalScreen = document.getElementById('goalScreen');
-        const mainCard = document.getElementById('mainCard');
+    /**
+     * Logic for Screen Size and Video Selection:
+     * Shows 'civ_vs_ecu.mp4' for 768x320 (horizontal)
+     * Shows 'civ_vs_ecu_vert.mp4' for 600x800 (vertical)
+     */
+    function updateVideoSource() {
+        const video = document.getElementById('video');
+        const width = window.innerWidth;
+        const height = window.innerHeight;
         
-        mainCard.style.display = 'none';
-        setTimeout(() => { mainCard.style.display = 'flex'; }, 2000);
+        let videoSrc = "";
+        if (width === 768 && height === 320) {
+            videoSrc = "./video/civ_vs_ecu.mp4";
+        } else if (width === 600 && height === 800) {
+            videoSrc = "./video/civ_vs_ecu_vert.mp4";
+        } else {
+            // Default logic based on orientation if exact sizes don't match
+            videoSrc = (height > width) ? "./video/civ_vs_ecu_vert.mp4" : "./video/civ_vs_ecu.mp4";
+        }
 
-        const isMexico = teamName.includes("Mexico");
+        // Only update and reload if the source actually changes
+        const currentSrc = video.src;
+        const absoluteVideoPath = new URL(videoSrc, window.location.href).href;
         
-        goalScreen.innerHTML = `
-            <video id="goalVideo" autoplay muted playsinline style="width: 100%; height: 100%; object-fit: cover;">
-                <source src="./videos/goal.mp4" type="video/mp4">
-            </video>
-        `;
-        goalScreen.classList.add('show');
-
-        if (goalTimeout) clearTimeout(goalTimeout);
-        goalTimeout = setTimeout(() => {
-            goalScreen.classList.remove('show');
-            goalScreen.innerHTML = '';
-            celebrationActive = false;
-        }, 2500);
+        if (currentSrc !== absoluteVideoPath) {
+            video.src = videoSrc;
+            video.load();
+        }
     }
+
+    // Initialize video and listen for window size changes
+    updateVideoSource();
+    window.addEventListener('resize', updateVideoSource);
+
+    /**
+     * Score Logic:
+     * Getting the score from the server and managing local storage.
+     * Match: Costa de Marfil vs Ecuador
+     */
+    const GAME_ID = "costa_marfil_vs_ecuador";
+    const STORAGE_KEY = "civ_vs_ecu_score";
+    
+    // Load initial score from local storage or default to 0-0
+    let previousNumbers = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [0, 0];
+    document.getElementById("home-score").textContent = previousNumbers[0];
+    document.getElementById("away-score").textContent = previousNumbers[1];
 
     async function loadData() {
         try {
-            const res = await fetch("https://doradobet-server.onrender.com/data?gameId=14879423");
+            const res = await fetch("https://doradobet-server.onrender.com/data?gameId=14881863");
             if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
             
             const data = await res.json();
             
-            // If the score is empty, it means the game might have ended or data is unavailable.
-            // In this case, we don't update the UI or localStorage, keeping the last known values.
             if (!data.score || data.score.trim() === "") return;
 
+            // Parse score from format like "Team A -> 1, Team B -> 2"
             const scoreParts = data.score.split(", ");
             
             if (scoreParts.length === 2) {
@@ -194,17 +183,13 @@
                 const awayScore = parseInt(scoreParts[1].split(" -> ")[1]);
                 const currentNumbers = [homeScore, awayScore];
                 
-                // Compare server score against the last saved score (localStorage)
                 const savedScore = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [0, 0];
 
-                if (currentNumbers[0] > savedScore[0] || currentNumbers[1] > savedScore[1]) {
-                    const scoreText = `<span>${homeScore}</span> &nbsp <span>${awayScore}</span>`;
-                    document.getElementById("score").innerHTML = scoreText;
+                // Update UI and storage if the score changed
+                if (currentNumbers[0] !== savedScore[0] || currentNumbers[1] !== savedScore[1]) {
+                    document.getElementById("home-score").textContent = currentNumbers[0];
+                    document.getElementById("away-score").textContent = currentNumbers[1];
                     
-                    let scoringTeam = currentNumbers[0] > savedScore[0] ? "Mexico" : "Sudafrica";
-                    showGoal(scoringTeam, scoreText);
-                    
-                    // Only update localStorage when a goal has been detected
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(currentNumbers));
                     previousNumbers = currentNumbers;
                 }
@@ -212,12 +197,9 @@
         } catch (error) { console.error("Error loading data:", error); }
     }
 
-    // document.getElementById('testGoalBtn').addEventListener('click', () => {
-    //     showGoal("Mexico", document.getElementById("score").textContent);
-    // });
-
+    // Fetch data immediately and then every second
     loadData();
-    setInterval(loadData, 1000);
+    // setInterval(loadData, 1000);
 </script>
 </body>
 </html>
